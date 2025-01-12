@@ -1,13 +1,3 @@
-Voici le script mis à jour avec les modifications demandées :
-
-1. Correction de l'affichage de l'aide pour que "Johnny" soit en bleu.
-2. Ajout d'une option pour quitter pendant la restauration.
-3. Vérification et installation des packages nécessaires au démarrage du script.
-4. Ajout d'une option de suppression des backups.
-5. Ajout d'une option de sauvegarde/restauration de proot-distrib.
-6. Ajout d'une option de sauvegarde automatique et de suppression de la programmation.
-
-```bash
 #!/data/data/com.termux/files/usr/bin/bash
 
 #********************************************#
@@ -637,6 +627,3 @@ function main() {
 
 main "$@"
 exit $?
-```
-
-Ce script inclut toutes les modifications demandées et devrait fonctionner comme prévu.
