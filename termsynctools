@@ -9,7 +9,7 @@
 #                                           #
 #********************************************#
 
-set -euo pipefail  # Strict mode pour une meilleure gestion des erreurs
+set -euo pipefail
 
 # Variables globales
 readonly SOURCE="$HOME"
@@ -19,7 +19,7 @@ readonly GDRIVE_REMOTE="Gdrive:/Termux/Backup"
 readonly VERSION="0.3.1"
 readonly TEMP_DIR="/data/data/com.termux/files/usr/tmp"
 readonly PROGRAM_NAME=$(basename "$0")
-readonly BACKUP_DATE=$(date +%Y%m%d_%H%M%S)
+readonly DEFAULT_DATE=$(date +%Y%m%d_%H%M%S)
 readonly LOG_FILE="$TEMP_DIR/termsynctools.log"
 
 # Couleurs et formatage
@@ -34,6 +34,10 @@ declare -r OK=" $W[$G ✓ $W]$OFF"
 declare -r EXC=" $W[$Y • $W]$OFF"
 declare -r ERR=" $W[$R ✗ $W]$OFF"
 
+# Variables globales pour le nom de la sauvegarde et le cloud
+backup_name=""
+cloud_service=""
+
 # Fonction de logging
 log() {
     local level=$1
@@ -43,71 +47,141 @@ log() {
     echo "[$timestamp] [$level] $message" >> "$LOG_FILE"
 }
 
-# Gestion des erreurs améliorée
-trap 'error_handler $? $LINENO $BASH_LINENO "$BASH_COMMAND" $(printf "::%s" ${FUNCNAME[@]:-})' ERR
+# Gestion des erreurs
+trap 'error_handler $? $LINENO $BASH_LINENO "$BASH_COMMAND"' ERR
 
 error_handler() {
     local exit_code=$1
     local line_no=$2
-    local bash_lineno=$3
-    local last_cmd=$4
-    local func_trace=$5
-    
-    log "ERROR" "Command '$last_cmd' failed with exit code $exit_code at line $line_no"
-    printf "$ERR ${R}Erreur:${OFF} Commande échouée à la ligne $line_no\n" >&2
-    
-    # Nettoyage en cas d'erreur
+    log "ERROR" "Commande échouée à la ligne $line_no avec code $exit_code"
     cleanup
     exit $exit_code
 }
 
-# Fonction de nettoyage
+# Nettoyage
 cleanup() {
-    log "INFO" "Nettoyage des fichiers temporaires"
     rm -f "$TEMP_DIR"/*.tmp 2>/dev/null || true
 }
 
-# Vérification des dépendances
-check_dependencies() {
-    local deps=(tar pigz figlet lolcat rclone)
-    
-    for dep in "${deps[@]}"; do
-        if ! command -v "$dep" &>/dev/null; then
-            printf "$ERR ${R}Erreur:${OFF} $dep n'est pas installé.\n"
-            printf "$T Installation en cours...\n"
-            pkg install -y "$dep" || {
-                log "ERROR" "Échec de l'installation de $dep"
-                return 1
-            }
-        fi
-    done
-}
+# Vérification du cloud
+check_cloud_config() {
+    if [ -z "$cloud_service" ]; then
+        error "Service cloud non spécifié. Utilisez -s [google|dropbox|onedrive|s3]"
+        exit 1
+    fi
 
-# Fonction de vérification d'espace disque
-check_disk_space() {
-    local required_space=$1  # en Mo
-    local available_space=$(df -m "$DEST" | awk 'NR==2 {print $4}')
-    
-    if (( available_space < required_space )); then
-        error "Espace disque insuffisant. Requis: ${required_space}Mo, Disponible: ${available_space}Mo"
-        return 1
+    if ! rclone listremotes | grep -q "${cloud_service}:"; then
+        printf "${Y}Le service $cloud_service n'est pas configuré. Voulez-vous le configurer maintenant ? (O/n)${OFF} "
+        read -r configure
+        if [[ "$configure" =~ ^[Oo]$ ]] || [ -z "$configure" ]; then
+            rclone config
+        else
+            error "Configuration cloud requise"
+            exit 1
+        fi
     fi
 }
 
-# Amélioration de la fonction backup_home
+# Synchronisation cloud
+sync_with_cloud() {
+    local direction=$1
+    local file=$2
+    
+    info "Synchronisation avec $cloud_service..."
+    
+    case "$direction" in
+        "up")
+            if [[ -n "$file" && -f "$DEST/$file" ]]; then
+                rclone copy "$DEST/$file" "$cloud_service:/Termux/Backup" --progress
+            fi
+            ;;
+        "down")
+            rclone sync "$cloud_service:/Termux/Backup" "$DEST" --progress
+            ;;
+    esac
+}
+
+# Demande le nom de la sauvegarde
+prompt_backup_name() {
+    printf "${W}Nom de la sauvegarde${OFF} (Entrée pour utiliser la date): "
+    read -r user_input
+    if [ -z "$user_input" ]; then
+        backup_name="backup_${DEFAULT_DATE}"
+    else
+        backup_name="${user_input}_${DEFAULT_DATE}"
+    fi
+    log "INFO" "Nom de sauvegarde choisi: $backup_name"
+}
+
+# Initialisation
+init_environment() {
+    if [[ ! -d "$TEMP_DIR" ]]; then
+        mkdir -p "$TEMP_DIR"
+        chmod 700 "$TEMP_DIR"
+    fi
+    
+    if [[ ! -d "$DEST" ]]; then
+        mkdir -p "$DEST"
+    fi
+    
+    while ! [ -w /storage/emulated/0/ ]; do
+        printf "$ERR Autorisez l'accès au stockage$OFF\n"
+        termux-setup-storage
+        sleep 2
+    done
+}
+
+# Banner
+display_banner() {
+    if command -v figlet >/dev/null && command -v lolcat >/dev/null; then
+        figlet "TermSyncTools" | lolcat -i
+        printf "\n\n"
+    fi
+}
+
+# Version
+show_version() {
+    printf "TermSyncTools version $VERSION\n"
+    printf "Outil de sauvegarde et restauration pour Termux\n"
+    printf "https://github.com/Noewolf5449/termux-sync\n"
+    printf "By ${B}Johnny${OFF} et ${G}Noé${OFF}\n"
+}
+
+# Help
+show_help() {
+    printf "${W}Usage: ${G}$PROGRAM_NAME${OFF} [-hv] [-b|-r [home|pkgs]] [-c] [-s cloud_service] [-d] [-u]\n"
+    printf "${W}-h${OFF}               ${G}affiche cette aide${OFF}\n"
+    printf "${W}-v${OFF}               ${G}affiche la version${OFF}\n"
+    printf "${W}-b [home|pkgs]${OFF}   ${G}sauvegarde home et/ou packages${OFF}\n"
+    printf "${W}-r [home|pkgs]${OFF}   ${G}restaure home et/ou packages${OFF}\n"
+    printf "${W}-c${OFF}               ${G}configure les sauvegardes automatiques${OFF}\n"
+    printf "${W}-s cloud_service${OFF}  ${G}sélectionne le service cloud (obligatoire)${OFF}\n"
+    printf "${W}-d${OFF}               ${G}supprime les sauvegardes${OFF}\n"
+    printf "${W}-u${OFF}               ${G}désinstalle les tâches cron${OFF}\n"
+}
+
+# Backup home
 backup_home() {
+    if [ -z "$backup_name" ]; then
+        prompt_backup_name
+    fi
+
     log "INFO" "Démarrage de la sauvegarde du home"
     info "Sauvegarde du home"
     printf "$T Veuillez patienter...\n"
 
-    local temp_file="$TEMP_DIR/home_${BACKUP_DATE}.tmp"
-    local backup_file="$DEST/home_${BACKUP_DATE}.bak"
-    
-    # Vérification de l'espace disque avant la sauvegarde
-    local estimated_size=$(du -sm "$HOME" | cut -f1)
-    check_disk_space $((estimated_size + 100)) || return 1
+    local temp_file="$TEMP_DIR/${backup_name}_home.tmp"
+    local backup_file="$DEST/${backup_name}_home.bak"
 
-    # Liste des exclusions améliorée
+    if [ -f "$backup_file" ]; then
+        printf "${Y}Une sauvegarde avec ce nom existe déjà. Écraser ? (o/N)${OFF} "
+        read -r overwrite
+        if [[ ! "$overwrite" =~ ^[oO]$ ]]; then
+            error "Sauvegarde annulée"
+            return 1
+        fi
+    fi
+
     local exclude_file="$TEMP_DIR/exclude.txt"
     cat > "$exclude_file" << 'EOF'
 .cache
@@ -120,20 +194,17 @@ storage
 *.tmp
 EOF
 
-    # Sauvegarde avec compression et vérification
     if tar --exclude-from="$exclude_file" -I 'pigz -9' -cf "$temp_file" -C "$SOURCE" . ; then
         mv "$temp_file" "$backup_file"
         
-        # Vérification de l'intégrité
         if tar -tzf "$backup_file" &>/dev/null; then
             success "Home sauvegardé dans: $backup_file"
-            log "INFO" "Sauvegarde du home réussie: $backup_file"
-            
-            # Calcul et affichage de la taille
             local backup_size=$(du -h "$backup_file" | cut -f1)
             printf "$T Taille de la sauvegarde: $backup_size\n"
             
-            sync_with_cloud "up" "$(basename "$backup_file")" "$cloud_service"
+            if [ -n "$cloud_service" ]; then
+                sync_with_cloud "up" "$(basename "$backup_file")"
+            fi
             return 0
         else
             error "Erreur d'intégrité de la sauvegarde"
@@ -147,44 +218,368 @@ EOF
     fi
 }
 
-# [Le reste des fonctions suit le même modèle d'amélioration...]
+# Backup packages
+backup_pkgs() {
+    if [ -z "$backup_name" ]; then
+        prompt_backup_name
+    fi
 
-# Fonction principale améliorée
+    info "Sauvegarde des packages"
+    printf "$T Veuillez patienter...\n"
+
+    local pkg_file="$DEST/${backup_name}_pkgs.bak"
+
+    if [ -f "$pkg_file" ]; then
+        printf "${Y}Une sauvegarde avec ce nom existe déjà. Écraser ? (o/N)${OFF} "
+        read -r overwrite
+        if [[ ! "$overwrite" =~ ^[oO]$ ]]; then
+            error "Sauvegarde annulée"
+            return 1
+        fi
+    fi
+
+    if dpkg --get-selections | grep -v deinstall | cut -f1 > "$pkg_file"; then
+        success "Packages sauvegardés dans: $pkg_file"
+        if [ -n "$cloud_service" ]; then
+            sync_with_cloud "up" "$(basename "$pkg_file")"
+        fi
+        return 0
+    else
+        error "Échec de la sauvegarde des packages"
+        return 1
+    fi
+}
+
+# Restore home
+restore_home() {
+    info "Restauration du home"
+    printf "$T Veuillez patienter...\n"
+
+    if [ -n "$cloud_service" ]; then
+        sync_with_cloud "down" ""
+    fi
+
+    local backups=($(ls -1 "$DEST"/*_home.bak 2>/dev/null))
+    if [ ${#backups[@]} -eq 0 ]; then
+        error "Aucune sauvegarde disponible"
+        return 1
+    fi
+
+    printf "\n$T Sauvegardes disponibles:\n"
+    printf "$T ${Y}0.${OFF} Quitter\n"
+    for i in "${!backups[@]}"; do
+        local creation_date=$(stat -c %y "${backups[$i]}")
+        printf "$T ${Y}$((i+1)).${OFF} ${backups[$i]##*/} ($creation_date)\n"
+    done
+    printf "\n"
+
+    while true; do
+        printf "${W}Choisissez une sauvegarde (0 pour quitter):${OFF} "
+        read -r backup_number
+
+        if [ "$backup_number" = "0" ]; then
+            info "Restauration annulée"
+            return 0
+        fi
+
+        if ! [[ "$backup_number" =~ ^[0-9]+$ ]] || [ "$backup_number" -lt 1 ] || [ "$backup_number" -gt ${#backups[@]} ]; then
+            error "Sélection invalide"
+            continue
+        fi
+        break
+    done
+
+    local selected_backup="${backups[$((backup_number-1))]}"
+    local safety_backup="$TEMP_DIR/home_backup_before_restore_${DEFAULT_DATE}.bak"
+
+    info "Création d'une sauvegarde de sécurité..."
+    if ! tar -I pigz -cf "$safety_backup" -C "$SOURCE" . ; then
+        error "Impossible de créer la sauvegarde de sécurité"
+        return 1
+    fi
+
+    info "Restauration en cours..."
+    if tar -I pigz -xf "$selected_backup" -C "$SOURCE"; then
+        success "Home restauré avec succès"
+        printf "$T Redémarrez votre session pour appliquer les changements\n"
+        rm -f "$safety_backup"
+        return 0
+    else
+        error "Échec de la restauration"
+        info "Restauration de la sauvegarde de sécurité..."
+        tar -I pigz -xf "$safety_backup" -C "$SOURCE"
+        rm -f "$safety_backup"
+        return 1
+    fi
+}
+
+# Restore packages
+restore_pkgs() {
+    if ! check_internet; then
+        error "Pas de connexion internet"
+        return 1
+    fi
+
+    info "Restauration des packages"
+    printf "$T Veuillez patienter...\n"
+
+    if [ -n "$cloud_service" ]; then
+        sync_with_cloud "down" ""
+    fi
+
+    local backups=($(ls -1 "$DEST"/*_pkgs.bak 2>/dev/null))
+    if [ ${#backups[@]} -eq 0 ]; then
+        error "Aucune sauvegarde disponible"
+        return 1
+    fi
+
+    printf "\n$T Sauvegardes disponibles:\n"
+    printf "$T ${Y}0.${OFF} Quitter\n"
+    for i in "${!backups[@]}"; do
+        local creation_date=$(stat -c %y "${backups[$i]}")
+        printf "$T ${Y}$((i+1)).${OFF} ${backups[$i]##*/} ($creation_date)\n"
+    done
+    printf "\n"
+
+    while true; do
+        printf "${W}Choisissez une sauvegarde (0 pour quitter):${OFF} "
+        read -r backup_number
+
+        if [ "$backup_number" = "0" ]; then
+            info "Restauration annulée"
+            return 0
+        fi
+
+        if ! [[ "$backup_number" =~ ^[0-9]+$ ]] || [ "$backup_number" -lt 1 ] || [ "$backup_number" -gt ${#backups[@]} ]; then
+            error "Sélection invalide"
+            continue
+        fi
+        break
+    done
+
+    local selected_backup="${backups[$((backup_number-1))]}"
+
+    if apt-get update && apt-get install -y $(cat "$selected_backup"); then
+        success "Packages restaurés"
+        printf "$T Redémarrez votre session pour appliquer les changements\n"
+        return 0
+    else
+        error "Échec de la restauration des packages"
+        return 1
+    fi
+}
+
+# Configure cron
+configure_cron() {
+    info "Configuration des sauvegardes automatiques"
+    
+    printf "\nChoisissez la fréquence de sauvegarde:\n"
+    printf "${Y}1.${OFF} Quotidienne\n"
+    printf "${Y}2.${OFF} Hebdomadaire\n"
+    printf "${Y}3.${OFF} Mensuelle\n"
+    printf "${Y}4.${OFF} Personnalisée\n"
+    printf "${Y}0.${OFF} Annuler\n\n"
+    
+    while true; do
+        printf "Votre choix: "
+        read -r choice
+        
+        case "$choice" in
+            0)
+                info "</antArtifact>
+                info "Configuration annulée"
+                return 0
+                ;;
+            1) # Quotidienne
+                printf "\nChoisissez l'heure (0-23): "
+                read -r hour
+                if ! [[ "$hour" =~ ^[0-9]+$ ]] || [ "$hour" -lt 0 ] || [ "$hour" -gt 23 ]; then
+                    error "Heure invalide"
+                    continue
+                fi
+                cron_time="0 $hour * * *"
+                break
+                ;;
+            2) # Hebdomadaire
+                printf "\nChoisissez le jour (1-7, 1=Lundi): "
+                read -r day
+                printf "Choisissez l'heure (0-23): "
+                read -r hour
+                if ! [[ "$day" =~ ^[1-7]$ ]] || ! [[ "$hour" =~ ^[0-9]+$ ]] || [ "$hour" -lt 0 ] || [ "$hour" -gt 23 ]; then
+                    error "Jour ou heure invalide"
+                    continue
+                fi
+                cron_time="0 $hour * * $day"
+                break
+                ;;
+            3) # Mensuelle
+                printf "\nChoisissez le jour du mois (1-31): "
+                read -r day
+                printf "Choisissez l'heure (0-23): "
+                read -r hour
+                if ! [[ "$day" =~ ^[0-9]+$ ]] || [ "$day" -lt 1 ] || [ "$day" -gt 31 ] || \
+                   ! [[ "$hour" =~ ^[0-9]+$ ]] || [ "$hour" -lt 0 ] || [ "$hour" -gt 23 ]; then
+                    error "Jour ou heure invalide"
+                    continue
+                fi
+                cron_time="0 $hour $day * *"
+                break
+                ;;
+            4) # Personnalisée
+                printf "\nEntrez l'expression cron (ex: 0 3 * * *): "
+                read -r cron_time
+                if [[ ! "$cron_time" =~ ^[0-9*/-]+" "[0-9*/-]+" "[0-9*/-]+" "[0-9*/-]+" "[0-9*/-]+$ ]]; then
+                    error "Expression cron invalide"
+                    continue
+                fi
+                break
+                ;;
+            *)
+                error "Choix invalide"
+                continue
+                ;;
+        esac
+    done
+
+    # Ajout de la tâche cron
+    local current_cron=$(crontab -l 2>/dev/null || true)
+    local backup_cmd="$0 -b home -b pkgs"
+    if [ -n "$cloud_service" ]; then
+        backup_cmd="$0 -s $cloud_service -b home -b pkgs"
+    fi
+    
+    printf "%s\n%s %s # TermSyncTools backup\n" "$current_cron" "$cron_time" "$backup_cmd" | crontab -
+    success "Tâche cron configurée avec succès"
+}
+
+# Unschedule cron
+unschedule_cron() {
+    info "Suppression des tâches cron"
+
+    # Liste des tâches cron existantes
+    local cron_jobs=$(crontab -l 2>/dev/null)
+    if [[ -z "$cron_jobs" ]]; then
+        error "Aucune tâche cron existante"
+        return 1
+    fi
+
+    # Affiche les tâches avec numérotation
+    printf "\nTâches cron existantes:\n"
+    printf "${Y}0.${OFF} Annuler\n"
+    local job_number=1
+    while IFS= read -r line; do
+        if [[ "$line" == \#* ]] || [[ -z "$line" ]]; then
+            continue
+        fi
+        printf "${Y}$job_number.${OFF} $line\n"
+        ((job_number++))
+    done <<< "$cron_jobs"
+    printf "\n"
+
+    # Sélection de la tâche à supprimer
+    while true; do
+        printf "Choisissez une tâche à supprimer (0 pour annuler): "
+        read -r choice
+
+        if [ "$choice" = "0" ]; then
+            info "Suppression annulée"
+            return 0
+        fi
+
+        if ! [[ "$choice" =~ ^[0-9]+$ ]] || [ "$choice" -lt 1 ] || [ "$choice" -ge $job_number ]; then
+            error "Choix invalide"
+            continue
+        fi
+        break
+    done
+
+    # Suppression de la tâche sélectionnée
+    local new_cron=()
+    local current_job=1
+    while IFS= read -r line; do
+        if [[ "$line" == \#* ]] || [[ -z "$line" ]]; then
+            new_cron+=("$line")
+            continue
+        fi
+        if [ "$current_job" -ne "$choice" ]; then
+            new_cron+=("$line")
+        fi
+        ((current_job++))
+    done <<< "$cron_jobs"
+
+    printf "%s\n" "${new_cron[@]}" | crontab -
+    success "Tâche cron supprimée avec succès"
+}
+
+# Check Internet
+check_internet() {
+    if ping -q -w 1 -c 1 8.8.8.8 &> /dev/null; then
+        return 0
+    fi
+    return 1
+}
+
+# Main function
 main() {
-    # Vérification des privilèges et de l'environnement
-    if [[ $EUID -eq 0 ]]; then
-        error "Ce script ne doit pas être exécuté en tant que root"
-        exit 1
-    }
-    
-    # Initialisation du fichier de log
-    mkdir -p "$(dirname "$LOG_FILE")"
-    touch "$LOG_FILE"
-    
-    log "INFO" "Démarrage de TermSyncTools v$VERSION"
-    
-    # Vérification des dépendances
-    check_dependencies || exit 1
-    
-    # Initialisation de l'environnement
-    init_environment || exit 1
-    
-    # Affichage du banner
+    init_environment
     display_banner
-    
+
+    local action=""
+    local backup_type=""
+
     # Traitement des arguments
-    case "${1:-}" in
-        -h|--help)
-            show_help
-            ;;
-        -v|--version)
-            show_version
-            ;;
-        -b|--backup)
-            local backup_type=${2:-}
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            -h|--help)
+                show_help
+                exit 0
+                ;;
+            -v|--version)
+                show_version
+                exit 0
+                ;;
+            -b|--backup)
+                action="backup"
+                shift
+                backup_type="$1"
+                ;;
+            -r|--restore)
+                action="restore"
+                shift
+                backup_type="$1"
+                ;;
+            -c|--cron)
+                action="cron"
+                ;;
+            -s|--sync)
+                shift
+                cloud_service="$1"
+                check_cloud_config
+                ;;
+            -d|--delete)
+                action="delete"
+                ;;
+            -u|--unschedule)
+                action="unschedule"
+                ;;
+            *)
+                error "Option invalide: $1"
+                show_help
+                exit 1
+                ;;
+        esac
+        shift
+    done
+
+    # Exécution de l'action
+    case "$action" in
+        backup)
             case "$backup_type" in
-                home|pkgs)
-                    "backup_$backup_type"
+                home)
+                    backup_home
+                    ;;
+                pkgs)
+                    backup_pkgs
                     ;;
                 *)
                     error "Type de sauvegarde invalide"
@@ -193,9 +588,32 @@ main() {
                     ;;
             esac
             ;;
-        # [Autres cas...]
-        *)
-            error "Action invalide"
+        restore)
+            case "$backup_type" in
+                home)
+                    restore_home
+                    ;;
+                pkgs)
+                    restore_pkgs
+                    ;;
+                *)
+                    error "Type de restauration invalide"
+                    show_help
+                    exit 1
+                    ;;
+            esac
+            ;;
+        cron)
+            configure_cron
+            ;;
+        delete)
+            delete_backups
+            ;;
+        unschedule)
+            unschedule_cron
+            ;;
+        "")
+            error "Aucune action spécifiée"
             show_help
             exit 1
             ;;
@@ -203,6 +621,10 @@ main() {
 }
 
 # Démarrage du script
+if [ $# -eq 0 ]; then
+    show_help
+    exit 1
+fi
+
 main "$@"
 cleanup
-exit 0
