@@ -2,7 +2,7 @@
 
 #********************************************#
 #                                           #
-#  TermSyncTools v0.2.1                     #
+#  TermSyncTools v0.2.7                     #
 #  A CLI tool to backup and restore termux  #
 #  https://github.com/tuxgyver/termuxsynctools #
 #  By Johnny et Noe Fontaine                 #
@@ -14,7 +14,7 @@ readonly SOURCE="$HOME"
 readonly DEST="$HOME/storage/shared/Termux/Backup"
 readonly PKGS_SRC="$PREFIX/var/log/apt/history.log"
 readonly GDRIVE_REMOTE="Gdrive:/Termux/Backup"
-readonly VERSION="0.2.1"
+readonly VERSION="0.2.7"
 readonly TEMP_DIR="/data/data/com.termux/files/usr/tmp"
 readonly program_name=$(basename "$0")
 
