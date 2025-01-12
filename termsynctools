@@ -523,7 +523,7 @@ function auto_backup() {
     info "Configuration de la sauvegarde automatique"
     printf "${t}Veuillez patienter...\n"
 
-    local cron_job="0 3 * * * /data/data/com.termux/files/usr/bin/bash /path/to/termsynctools -b"
+    local cron_job="0 7 * * * /data/data/com.termux/files/usr/bin/bash termsynctools -b"
 
     if (crontab -l 2>/dev/null; echo "$cron_job" ) | crontab -; then
         success "Sauvegarde automatique configurée"
@@ -539,7 +539,7 @@ function delete_auto_backup() {
     info "Suppression de la sauvegarde automatique"
     printf "${t}Veuillez patienter...\n"
 
-    local cron_job="0 3 * * * /data/data/com.termux/files/usr/bin/bash /path/to/termsynctools -b"
+    local cron_job="0 7 * * * /data/data/com.termux/files/usr/bin/bash termsynctools -b"
     local temp_crontab=$(mktemp)
 
     # Lire le fichier crontab actuel
