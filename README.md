@@ -119,9 +119,11 @@ Contributions are welcome! Please open an issue or submit a pull request.
 ## Acknowledgments
 
 - Thanks to the Termux community for their support and contributions.
-- Special thanks to [laraib07](https://github.com/laraib07) for the original script.
+- Special thanks to [tuxgyver](https://github.com/tuxgyver/TermSyncTools) for the original script even if it was me who gave him the ideas and features of this project because we launched it together.
 
 ## Contact
+
+[arkoreal2021@gmail.com](https://mail.google.com/mail/u/0/#inbox?compose=CllgCJNxNNDgCTWlhGsVWTMjCfRxzMkdXGtctbNTtLhdmSxhLzqCLdJjBlMzVCWvtGDqPpXZBsq)
 
 For any questions or issues, please open an issue on the GitHub repository.
 ```
