@@ -4,8 +4,8 @@
 #                                           #
 #  TermSyncTools v0.2.1                     #
 #  A CLI tool to backup and restore termux  #
-#  https://github.com/Noewolf5449/termux-sync #
-#  By Johnny & Noe Fontaine                 #
+#  https://github.com/tuxgyver/termuxsynctools #
+#  By Johnny et Noe Fontaine                 #
 #                                           #
 #********************************************#
 
@@ -19,6 +19,7 @@ readonly TEMP_DIR="/data/data/com.termux/files/usr/tmp"
 readonly program_name=$(basename "$0")
 
 # Colors
+B='\e[1:34m'	# blue
 R='\e[1;31m'    # red
 G='\e[1;32m'    # green
 W='\e[1;37m'    # white bold
@@ -69,8 +70,9 @@ function show_help() {
 function show_version() {
     printf "TermSyncTools version ${VERSION}\n"
     printf "Outil de sauvegarde et restauration pour Termux\n"
-    printf "https://github.com/tuxgyver/TermSyncTools/ \n"
-    printf "By Fontaine Johnny et Noé ;-)"
+    printf "https://github.com/Noewolf5449/termux-sync\n"
+    printf "By Fontaine ${B}Johnny${off} & ${G}Noe${off} \n"
+}
 
 # Error handling
 function error() {
