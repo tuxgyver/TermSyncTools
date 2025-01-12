@@ -546,7 +546,7 @@ function delete_auto_backup() {
     crontab -l > "$temp_crontab"
 
     # Supprimer la ligne spécifique de la tâche cron
-    sed -i "/$cron_job/d" "$temp_crontab"
+    grep -vF "$cron_job" "$temp_crontab" > "$temp_crontab.tmp" && mv "$temp_crontab.tmp" "$temp_crontab"
 
     # Écrire le fichier crontab mis à jour
     crontab "$temp_crontab"
@@ -557,6 +557,7 @@ function delete_auto_backup() {
     success "Sauvegarde automatique supprimée"
     return 0
 }
+
 
 # Install dependencies
 function install_dependencies() {
