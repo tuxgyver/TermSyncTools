@@ -1,4 +1,3 @@
-Bien sûr ! Voici un exemple de fichier `README.md` pour votre projet `TermSyncTools` sur GitHub :
 
 ```markdown
 # TermSyncTools
