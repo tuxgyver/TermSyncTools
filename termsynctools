@@ -14,7 +14,7 @@ readonly SOURCE="$HOME"
 readonly DEST="$HOME/storage/shared/Termux/Backup"
 readonly PKGS_SRC="$PREFIX/var/log/apt/history.log"
 readonly GDRIVE_REMOTE="Gdrive:/Termux/Backup"
-readonly VERSION="0.2.6"
+readonly VERSION="0.3.0"
 readonly TEMP_DIR="/data/data/com.termux/files/usr/tmp"
 readonly program_name=$(basename "$0")
 
