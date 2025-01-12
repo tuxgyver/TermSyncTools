@@ -1,3 +1,13 @@
+Voici le script mis à jour avec les modifications demandées :
+
+1. Correction de l'affichage de l'aide pour que "Johnny" soit en bleu.
+2. Ajout d'une option pour quitter pendant la restauration.
+3. Vérification et installation des packages nécessaires au démarrage du script.
+4. Ajout d'une option de suppression des backups.
+5. Ajout d'une option de sauvegarde/restauration de proot-distrib.
+6. Ajout d'une option de sauvegarde automatique et de suppression de la programmation.
+
+```bash
 #!/data/data/com.termux/files/usr/bin/bash
 
 #********************************************#
@@ -19,7 +29,7 @@ readonly TEMP_DIR="/data/data/com.termux/files/usr/tmp"
 readonly program_name=$(basename "$0")
 
 # Colors
-B='\e[1:34m'	# blue
+B='\e[1;34m'	# blue
 R='\e[1;31m'    # red
 G='\e[1;32m'    # green
 W='\e[1;37m'    # white bold
@@ -59,11 +69,16 @@ function display_banner() {
 
 # Help
 function show_help() {
-    printf "${W}Usage: ${G}${program_name}${off} [-hv] [-b|-r [home|pkgs]]\n"
+    printf "${W}Usage: ${G}${program_name}${off} [-hvq] [-b|-r [home|pkgs|proot]] [-d] [-s] [-a]\n"
     printf "${W}-h${off}               ${G}affiche cette aide${off}\n"
     printf "${W}-v${off}               ${G}affiche la version${off}\n"
-    printf "${W}-b [home|pkgs]${off}   ${G}sauvegarde home et/ou packages${off}\n"
-    printf "${W}-r [home|pkgs]${off}   ${G}restaure home et/ou packages${off}\n"
+    printf "${W}-b [home|pkgs|proot]${off}   ${G}sauvegarde home, packages ou proot-distrib${off}\n"
+    printf "${W}-r [home|pkgs|proot]${off}   ${G}restaure home, packages ou proot-distrib${off}\n"
+    printf "${W}-d${off}               ${G}supprime les backups${off}\n"
+    printf "${W}-s${off}               ${G}sauvegarde automatique${off}\n"
+    printf "${W}-a${off}               ${G}supprime la programmation de la sauvegarde automatique${off}\n"
+    printf "${W}-q${off}               ${G}quitte pendant la restauration${off}\n"
+    printf "By Fontaine ${B}Johnny${off} & ${G}Noe${off} \n"
 }
 
 # Version
@@ -101,14 +116,14 @@ function check_internet() {
 function sync_with_gdrive() {
     local direction=$1
     local file=$2
-    
+
     info "Synchronisation avec Google Drive..."
-    
+
     if ! rclone listremotes | grep -q "Gdrive:"; then
         error "Google Drive non configuré. Exécutez 'rclone config'"
         return 1
     fi
-    
+
     case "$direction" in
         "up")
             if [[ -n "$file" && -f "${DEST}/${file}" ]]; then
@@ -129,7 +144,7 @@ function sync_with_gdrive() {
             return 1
             ;;
     esac
-    
+
     error "Échec de la synchronisation"
     return 1
 }
@@ -138,10 +153,10 @@ function sync_with_gdrive() {
 function backup_home() {
     info "Sauvegarde du home"
     printf "${t}Veuillez patienter...\n"
-    
+
     local temp_file="${TEMP_DIR}/${backup_name}_home.tmp"
     local backup_file="${DEST}/${backup_name}_home.bak"
-    
+
     # Liste des exclusions
     local exclude_dirs=(
         ".cache"
@@ -151,12 +166,12 @@ function backup_home() {
         "${TEMP_DIR}"
         "${DEST}"
     )
-    
+
     local exclude_args=""
     for dir in "${exclude_dirs[@]}"; do
         exclude_args+="--exclude='${dir}' "
     done
-    
+
     # Sauvegarde
     if eval tar -I pigz -cf "${temp_file}" -C "${SOURCE}" ${exclude_args} . ; then
         mv "${temp_file}" "${backup_file}"
@@ -174,9 +189,9 @@ function backup_home() {
 function backup_pkgs() {
     info "Sauvegarde des packages"
     printf "${t}Veuillez patienter...\n"
-    
+
     local pkg_file="${DEST}/${backup_name}_pkgs.bak"
-    
+
     # Liste des packages installés
     if dpkg --get-selections | grep -v deinstall | cut -f1 > "${pkg_file}"; then
         success "Packages sauvegardés dans: ${pkg_file}"
@@ -188,49 +203,72 @@ function backup_pkgs() {
     fi
 }
 
+# Backup proot-distrib
+function backup_proot() {
+    info "Sauvegarde de proot-distrib"
+    printf "${t}Veuillez patienter...\n"
+
+    local proot_file="${DEST}/${backup_name}_proot.bak"
+
+    # Sauvegarde de proot-distrib
+    if tar -I pigz -cf "${proot_file}" -C "${SOURCE}" proot-distro ; then
+        success "proot-distrib sauvegardé dans: ${proot_file}"
+        sync_with_gdrive "up" "${backup_name}_proot.bak"
+        return 0
+    else
+        error "Échec de la sauvegarde de proot-distrib"
+        return 1
+    fi
+}
+
 # Restore home
 function restore_home() {
     info "Restauration du home"
     printf "${t}Veuillez patienter...\n"
-    
+
     # Synchronisation avec Google Drive
     sync_with_gdrive "down"
-    
+
     # Vérifie les sauvegardes disponibles
     local backups=($(ls -1 ${DEST}/*_home.bak 2>/dev/null))
     if [ ${#backups[@]} -eq 0 ]; then
         error "Aucune sauvegarde disponible"
         return 1
     fi
-    
+
     # Liste les sauvegardes
     printf "\n${t}Sauvegardes disponibles:\n"
     for i in "${!backups[@]}"; do
         printf "${t}$((i+1)). ${backups[$i]##*/}\n"
     done
     printf "\n"
-    
+
     # Sélection de la sauvegarde
     local backup_number
-    read -p "Numéro de la sauvegarde à restaurer: " backup_number
-    
+    read -p "Numéro de la sauvegarde à restaurer (ou 'q' pour quitter): " backup_number
+
+    if [[ "$backup_number" == "q" ]]; then
+        info "Quitter la restauration"
+        return 0
+    fi
+
     if ! [[ "$backup_number" =~ ^[0-9]+$ ]] || \
        [ "$backup_number" -lt 1 ] || \
        [ "$backup_number" -gt ${#backups[@]} ]; then
         error "Sélection invalide"
         return 1
     fi
-    
+
     local selected_backup="${backups[$((backup_number-1))]}"
     local safety_backup="${TEMP_DIR}/home_backup_before_restore_$(date +%Y%m%d_%H%M%S).bak"
-    
+
     # Crée une sauvegarde de sécurité
     info "Création d'une sauvegarde de sécurité..."
     if ! tar -I pigz -cf "${safety_backup}" -C "${SOURCE}" . ; then
         error "Impossible de créer la sauvegarde de sécurité"
         return 1
     fi
-    
+
     # Restaure la sauvegarde
     info "Restauration en cours..."
     if tar -I pigz -xf "${selected_backup}" -C "${SOURCE}"; then
@@ -253,40 +291,45 @@ function restore_pkgs() {
         error "Pas de connexion internet"
         return 1
     fi
-    
+
     info "Restauration des packages"
     printf "${t}Veuillez patienter...\n"
-    
+
     # Synchronisation avec Google Drive
     sync_with_gdrive "down"
-    
+
     # Vérifie les sauvegardes disponibles
     local backups=($(ls -1 ${DEST}/*_pkgs.bak 2>/dev/null))
     if [ ${#backups[@]} -eq 0 ]; then
         error "Aucune sauvegarde disponible"
         return 1
     fi
-    
+
     # Liste les sauvegardes
     printf "\n${t}Sauvegardes disponibles:\n"
     for i in "${!backups[@]}"; do
         printf "${t}$((i+1)). ${backups[$i]##*/}\n"
     done
     printf "\n"
-    
+
     # Sélection de la sauvegarde
     local backup_number
-    read -p "Numéro de la sauvegarde à restaurer: " backup_number
-    
+    read -p "Numéro de la sauvegarde à restaurer (ou 'q' pour quitter): " backup_number
+
+    if [[ "$backup_number" == "q" ]]; then
+        info "Quitter la restauration"
+        return 0
+    fi
+
     if ! [[ "$backup_number" =~ ^[0-9]+$ ]] || \
        [ "$backup_number" -lt 1 ] || \
        [ "$backup_number" -gt ${#backups[@]} ]; then
         error "Sélection invalide"
         return 1
     fi
-    
+
     local selected_backup="${backups[$((backup_number-1))]}"
-    
+
     # Mise à jour et installation des packages
     if apt-get update && apt-get install -y $(cat "${selected_backup}"); then
         success "Packages restaurés"
@@ -298,16 +341,80 @@ function restore_pkgs() {
     fi
 }
 
+# Restore proot-distrib
+function restore_proot() {
+    info "Restauration de proot-distrib"
+    printf "${t}Veuillez patienter...\n"
+
+    # Synchronisation avec Google Drive
+    sync_with_gdrive "down"
+
+    # Vérifie les sauvegardes disponibles
+    local backups=($(ls -1 ${DEST}/*_proot.bak 2>/dev/null))
+    if [ ${#backups[@]} -eq 0 ]; then
+        error "Aucune sauvegarde disponible"
+        return 1
+    fi
+
+    # Liste les sauvegardes
+    printf "\n${t}Sauvegardes disponibles:\n"
+    for i in "${!backups[@]}"; do
+        printf "${t}$((i+1)). ${backups[$i]##*/}\n"
+    done
+    printf "\n"
+
+    # Sélection de la sauvegarde
+    local backup_number
+    read -p "Numéro de la sauvegarde à restaurer (ou 'q' pour quitter): " backup_number
+
+    if [[ "$backup_number" == "q" ]]; then
+        info "Quitter la restauration"
+        return 0
+    fi
+
+    if ! [[ "$backup_number" =~ ^[0-9]+$ ]] || \
+       [ "$backup_number" -lt 1 ] || \
+       [ "$backup_number" -gt ${#backups[@]} ]; then
+        error "Sélection invalide"
+        return 1
+    fi
+
+    local selected_backup="${backups[$((backup_number-1))]}"
+    local safety_backup="${TEMP_DIR}/proot_backup_before_restore_$(date +%Y%m%d_%H%M%S).bak"
+
+    # Crée une sauvegarde de sécurité
+    info "Création d'une sauvegarde de sécurité..."
+    if ! tar -I pigz -cf "${safety_backup}" -C "${SOURCE}" proot-distro ; then
+        error "Impossible de créer la sauvegarde de sécurité"
+        return 1
+    fi
+
+    # Restaure la sauvegarde
+    info "Restauration en cours..."
+    if tar -I pigz -xf "${selected_backup}" -C "${SOURCE}"; then
+        success "proot-distrib restauré avec succès"
+        printf "${t}Redémarrez votre session pour appliquer les changements\n"
+        rm -f "${safety_backup}"
+        return 0
+    else
+        error "Échec de la restauration"
+        info "Restauration de la sauvegarde de sécurité..."
+        tar -I pigz -xf "${safety_backup}" -C "${SOURCE}"
+        rm -f "${safety_backup}"
+        return 1
+    fi
+}
+
 # Backup function
 function backup() {
     local type=$1
-    
+
     # Demande le nom de la sauvegarde
     read -p "Nom de la sauvegarde (vide pour nom par défaut): " backup_name
     if [[ -z "$backup_name" ]]; then
         backup_name="backup_$(date +%Y%m%d_%H%M%S)"
     fi
-    
+
     case "$type" in
         "home")
             backup_home
@@ -315,8 +422,11 @@ function backup() {
         "pkgs")
             backup_pkgs
             ;;
+        "proot")
+            backup_proot
+            ;;
         "")
-            backup_home && backup_pkgs
+            backup_home && backup_pkgs && backup_proot
             ;;
         *)
             error "Type de sauvegarde invalide"
@@ -329,7 +439,7 @@ function backup() {
 # Restore function
 function restore() {
     local type=$1
-    
+
     case "$type" in
         "home")
             restore_home
@@ -337,8 +447,11 @@ function restore() {
         "pkgs")
             restore_pkgs
             ;;
+        "proot")
+            restore_proot
+            ;;
         "")
-            restore_home && restore_pkgs
+            restore_home && restore_pkgs && restore_proot
             ;;
         *)
             error "Type de restauration invalide"
@@ -348,11 +461,63 @@ function restore() {
     esac
 }
 
+# Delete backups
+function delete_backups() {
+    info "Suppression des backups"
+    printf "${t}Veuillez patienter...\n"
+
+    if rm -rf "${DEST}"/*.bak; then
+        success "Backups supprimés"
+        return 0
+    else
+        error "Échec de la suppression des backups"
+        return 1
+    fi
+}
+
+# Auto backup
+function auto_backup() {
+    info "Configuration de la sauvegarde automatique"
+    printf "${t}Veuillez patienter...\n"
+
+    local cron_file="${TEMP_DIR}/termux_sync_cron"
+    local cron_job="0 3 * * * ${program_name} -b >/dev/null 2>&1"
+
+    if echo "${cron_job}" > "${cron_file}"; then
+        if crontab "${cron_file}"; then
+            success "Sauvegarde automatique configurée"
+            rm -f "${cron_file}"
+            return 0
+        else
+            error "Échec de la configuration de la sauvegarde automatique"
+            rm -f "${cron_file}"
+            return 1
+        fi
+    else
+        error "Échec de la création du fichier cron"
+        return 1
+    fi
+}
+
+# Delete auto backup
+function delete_auto_backup() {
+    info "Suppression de la sauvegarde automatique"
+    printf "${t}Veuillez patienter...\n"
+
+    if crontab -r; then
+        success "Sauvegarde automatique supprimée"
+        return 0
+    else
+        error "Échec de la suppression de la sauvegarde automatique"
+        return 1
+    fi
+}
+
 # Install dependencies
 function install_dependencies() {
     if check_internet; then
         info "Installation des dépendances..."
-        
+
         if apt-get update && \
            apt-get install -y tar pigz rclone figlet lolcat; then
             success "Dépendances installées"
@@ -396,26 +561,26 @@ function cleanup() {
 function main() {
     # Trap signals
     trap cleanup 1 2 3 15 20
-    
+
     # Initialize environment
     init_environment
-    
+
     # Check and install dependencies
     if ! [[ $(type -P tar) && $(type -P pigz) && \
             $(type -P rclone) && $(type -P figlet) && \
             $(type -P lolcat) ]]; then
         install_dependencies
     fi
-    
+
     # Configure rclone
     configure_rclone
-    
+
     # Display banner
     display_banner
-    
+
     # Parse arguments
     local OPTIND
-    while getopts ":hvbr" opt; do
+    while getopts ":hvbrdqsa" opt; do
         case $opt in
             h)
                 show_help
@@ -435,6 +600,22 @@ function main() {
                 restore "${OPTARG}"
                 return $?
                 ;;
+            d)
+                delete_backups
+                return $?
+                ;;
+            s)
+                auto_backup
+                return $?
+                ;;
+            a)
+                delete_auto_backup
+                return $?
+                ;;
+            q)
+                info "Quitter la restauration"
+                return 0
+                ;;
             \?)
                 error "Option invalide"
                 return 1
@@ -446,7 +627,7 @@ function main() {
                 ;;
         esac
     done
-    
+
     if [[ $OPTIND -eq 1 ]]; then
         error "Aucune option fournie"
         printf "Utilisez '${program_name} -h' pour l'aide\n"
@@ -456,3 +637,6 @@ function main() {
 
 main "$@"
 exit $?
+```
+
+Ce script inclut toutes les modifications demandées et devrait fonctionner comme prévu.
