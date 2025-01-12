@@ -10,13 +10,13 @@
 #********************************************#
 
 # Variables
-readonly SOURCE="$HOME"
-readonly DEST="$HOME/storage/shared/Termux/Backup"
+readonly SOURCE="\$HOME"
+readonly DEST="\$HOME/storage/shared/Termux/Backup"
 readonly PKGS_SRC="$PREFIX/var/log/apt/history.log"
 readonly GDRIVE_REMOTE="Gdrive:/Termux/Backup"
-readonly VERSION="0.2.5"
+readonly VERSION="0.2.6"
 readonly TEMP_DIR="/data/data/com.termux/files/usr/tmp"
-readonly program_name=$(basename "$0")
+readonly program_name=$(basename "\$0")
 
 # Colors
 B='\e[1;34m'    # blue
@@ -26,18 +26,18 @@ W='\e[1;37m'    # white bold
 Y='\e[1;33m'    # yellow
 off='\e[0m'     # reset color
 t='       '     # tab
-OK=" $W[$G ✓ $W]$off"
-EXC=" $W[$Y • $W]$off"
-ERR=" $W[$R ✗ $W]$off"
+OK=" \$W[\$G ✓ \$W]\$off"
+EXC=" \$W[\$Y • \$W]\$off"
+ERR=" \$W[\$R ✗ \$W]\$off"
 
 # Color Table
 function show_color_table() {
-    printf "${W}Table des couleurs:\n"
-    printf "${R}Red: ${R}Ceci est du texte rouge${off}\n"
-    printf "${G}Green: ${G}Ceci est du texte vert${off}\n"
-    printf "${Y}Yellow: ${Y}Ceci est du texte jaune${off}\n"
-    printf "${B}Blue: ${B}Ceci est du texte bleu${off}\n"
-    printf "${W}White: ${W}Ceci est du texte blanc${off}\n"
+    printf "\${W}Table des couleurs:\n"
+    printf "${R}Red: ${R}Ceci est du texte rouge\${off}\n"
+    printf "${G}Green: ${G}Ceci est du texte vert\${off}\n"
+    printf "${Y}Yellow: ${Y}Ceci est du texte jaune\${off}\n"
+    printf "${B}Blue: ${B}Ceci est du texte bleu\${off}\n"
+    printf "${W}White: ${W}Ceci est du texte blanc\${off}\n"
 }
 
 # Initialize environment
@@ -45,15 +45,15 @@ function init_environment() {
     # Vérifier/créer le répertoire temporaire
     if [[ ! -d "${TEMP_DIR}" ]]; then
         mkdir -p "${TEMP_DIR}"
-        chmod 700 "${TEMP_DIR}"
+        chmod 700 "\${TEMP_DIR}"
     fi
     # Vérifier/créer le répertoire de destination
-    if [[ ! -d "${DEST}" ]]; then
-        mkdir -p "${DEST}"
+    if [[ ! -d "\${DEST}" ]]; then
+        mkdir -p "\${DEST}"
     fi
     # Vérifier les permissions de stockage
     while ! [ -w /storage/emulated/0/ ]; do
-        printf "${ERR} Autorisez l'accès au stockage${off}\n"
+        printf "\${ERR} Autorisez l'accès au stockage\${off}\n"
         termux-setup-storage
         sleep 2
     done
@@ -67,35 +67,39 @@ function display_banner() {
 
 # Help
 function show_help() {
-    printf "${W}Usage: ${G}${program_name}${off} [-hv] [-b|-r [home|pkgs]] [-c]\n"
+    printf "${W}Usage: ${G}${program_name}${off} [-hv] [-b|-r [home|pkgs]] [-c] [-s cloud_service] [-x] [-d] [-u]\n"
     printf "${W}-h${off}               ${G}affiche cette aide${off}\n"
     printf "${W}-v${off}               ${G}affiche la version${off}\n"
     printf "${W}-b [home|pkgs]${off}   ${G}sauvegarde home et/ou packages${off}\n"
     printf "${W}-r [home|pkgs]${off}   ${G}restaure home et/ou packages${off}\n"
     printf "${W}-c${off}               ${G}configure les sauvegardes automatiques avec cron${off}\n"
+    printf "${W}-s cloud_service${off}  ${G}sélectionne le service cloud (google, dropbox, onedrive, s3)${off}\n"
+    printf "${W}-x${off}               ${G}synchronise les sauvegardes entre deux appareils (beta)${off}\n"
+    printf "${W}-d${off}               ${G}supprime les sauvegardes${off}\n"
+    printf "${W}-u${off}               ${G}désinstalle les tâches cron existantes${off}\n"
 }
 
 # Version
 function show_version() {
-    printf "TermSyncTools version ${VERSION}\n"
+    printf "TermSyncTools version \${VERSION}\n"
     printf "Outil de sauvegarde et restauration pour Termux\n"
     printf "https://github.com/Noewolf5449/termux-sync\n"
-    printf "By Fontaine ${B}Johnny${off} & ${G}Noe${off} \n"
+    printf "By Fontaine Johnny et Noé ;-)"
 }
 
 # Error handling
 function error() {
-    printf "${ERR} ${R}Erreur:${off} $*\n" >&2
+    printf "\${ERR} ${R}Erreur:${off} \$*\n" >&2
 }
 
 # Success message
 function success() {
-    printf "${OK} $*\n"
+    printf "\${OK} \$*\n"
 }
 
 # Info message
 function info() {
-    printf "${EXC} $*\n"
+    printf "\${EXC} \$*\n"
 }
 
 # Check Internet
@@ -108,8 +112,8 @@ function check_internet() {
 
 # Google Drive sync
 function sync_with_gdrive() {
-    local direction=$1
-    local file=$2
+    local direction=\$1
+    local file=\$2
 
     info "Synchronisation avec Google Drive..."
 
@@ -118,9 +122,9 @@ function sync_with_gdrive() {
         return 1
     fi
 
-    case "$direction" in
+    case "\$direction" in
         "up")
-            if [[ -n "$file" && -f "${DEST}/${file}" ]]; then
+            if [[ -n "\$file" && -f "\${DEST}/${file}" ]]; then
                 if rclone copy "${DEST}/${file}" "${GDRIVE_REMOTE}" --progress; then
                     success "Synchronisation terminée"
                     return 0
@@ -143,10 +147,150 @@ function sync_with_gdrive() {
     return 1
 }
 
+# Dropbox sync
+function sync_with_dropbox() {
+    local direction=\$1
+    local file=\$2
+
+    info "Synchronisation avec Dropbox..."
+
+    if ! rclone listremotes | grep -q "Dropbox:"; then
+        error "Dropbox non configuré. Exécutez 'rclone config'"
+        return 1
+    fi
+
+    case "\$direction" in
+        "up")
+            if [[ -n "\$file" && -f "\${DEST}/${file}" ]]; then
+                if rclone copy "${DEST}/${file}" "Dropbox:/Termux/Backup" --progress; then
+                    success "Synchronisation terminée"
+                    return 0
+                fi
+            fi
+            ;;
+        "down")
+            if rclone sync "Dropbox:/Termux/Backup" "${DEST}" --progress; then
+                success "Synchronisation terminée"
+                return 0
+            fi
+            ;;
+        *)
+            error "Direction de synchronisation invalide"
+            return 1
+            ;;
+    esac
+
+    error "Échec de la synchronisation"
+    return 1
+}
+
+# OneDrive sync
+function sync_with_onedrive() {
+    local direction=\$1
+    local file=\$2
+
+    info "Synchronisation avec OneDrive..."
+
+    if ! rclone listremotes | grep -q "OneDrive:"; then
+        error "OneDrive non configuré. Exécutez 'rclone config'"
+        return 1
+    fi
+
+    case "\$direction" in
+        "up")
+            if [[ -n "\$file" && -f "\${DEST}/${file}" ]]; then
+                if rclone copy "${DEST}/${file}" "OneDrive:/Termux/Backup" --progress; then
+                    success "Synchronisation terminée"
+                    return 0
+                fi
+            fi
+            ;;
+        "down")
+            if rclone sync "OneDrive:/Termux/Backup" "${DEST}" --progress; then
+                success "Synchronisation terminée"
+                return 0
+            fi
+            ;;
+        *)
+            error "Direction de synchronisation invalide"
+            return 1
+            ;;
+    esac
+
+    error "Échec de la synchronisation"
+    return 1
+}
+
+# Amazon S3 sync
+function sync_with_s3() {
+    local direction=\$1
+    local file=\$2
+
+    info "Synchronisation avec Amazon S3..."
+
+    if ! rclone listremotes | grep -q "S3:"; then
+        error "Amazon S3 non configuré. Exécutez 'rclone config'"
+        return 1
+    fi
+
+    case "\$direction" in
+        "up")
+            if [[ -n "\$file" && -f "\${DEST}/${file}" ]]; then
+                if rclone copy "${DEST}/${file}" "S3:/Termux/Backup" --progress; then
+                    success "Synchronisation terminée"
+                    return 0
+                fi
+            fi
+            ;;
+        "down")
+            if rclone sync "S3:/Termux/Backup" "${DEST}" --progress; then
+                success "Synchronisation terminée"
+                return 0
+            fi
+            ;;
+        *)
+            error "Direction de synchronisation invalide"
+            return 1
+            ;;
+    esac
+
+    error "Échec de la synchronisation"
+    return 1
+}
+
+# Synchronize backups between two devices
+function sync_between_devices() {
+    info "Synchronisation des sauvegardes entre deux appareils..."
+
+    # Demande le service cloud à utiliser
+    read -p "Service cloud à utiliser (google, dropbox, onedrive, s3): " cloud_service
+
+    case "\$cloud_service" in
+        "google")
+            sync_with_gdrive "down"
+            ;;
+        "dropbox")
+            sync_with_dropbox "down"
+            ;;
+        "onedrive")
+            sync_with_onedrive "down"
+            ;;
+        "s3")
+            sync_with_s3 "down"
+            ;;
+        *)
+            error "Service cloud non supporté"
+            return 1
+            ;;
+    esac
+
+    success "Synchronisation des sauvegardes entre deux appareils terminée"
+}
+
 # Backup home
 function backup_home() {
     info "Sauvegarde du home"
-    printf "${t}Veuillez patienter...\n"
+    printf "\${t}Veuillez patienter...\n"
 
     local temp_file="${TEMP_DIR}/${backup_name}_home.tmp"
     local backup_file="${DEST}/${backup_name}_home.bak"
@@ -170,7 +314,24 @@ function backup_home() {
     if eval tar -I pigz -cf "${temp_file}" -C "${SOURCE}" ${exclude_args} . ; then
         mv "${temp_file}" "${backup_file}"
         success "Home sauvegardé dans: ${backup_file}"
-        sync_with_gdrive "up" "${backup_name}_home.bak"
+        case "$cloud_service" in
+            "google")
+                sync_with_gdrive "up" "${backup_name}_home.bak"
+                ;;
+            "dropbox")
+                sync_with_dropbox "up" "${backup_name}_home.bak"
+                ;;
+            "onedrive")
+                sync_with_onedrive "up" "${backup_name}_home.bak"
+                ;;
+            "s3")
+                sync_with_s3 "up" "${backup_name}_home.bak"
+                ;;
+            *)
+                error "Service cloud non supporté"
+                return 1
+                ;;
+        esac
         return 0
     else
         rm -f "${temp_file}"
@@ -182,14 +343,31 @@ function backup_home() {
 # Backup packages
 function backup_pkgs() {
     info "Sauvegarde des packages"
-    printf "${t}Veuillez patienter...\n"
+    printf "\${t}Veuillez patienter...\n"
 
-    local pkg_file="${DEST}/${backup_name}_pkgs.bak"
+    local pkg_file="\${DEST}/\${backup_name}_pkgs.bak"
 
     # Liste des packages installés
-    if dpkg --get-selections | grep -v deinstall | cut -f1 > "${pkg_file}"; then
-        success "Packages sauvegardés dans: ${pkg_file}"
-        sync_with_gdrive "up" "${backup_name}_pkgs.bak"
+    if dpkg --get-selections | grep -v deinstall | cut -f1 > "\${pkg_file}"; then
+        success "Packages sauvegardés dans: \${pkg_file}"
+        case "$cloud_service" in
+            "google")
+                sync_with_gdrive "up" "${backup_name}_pkgs.bak"
+                ;;
+            "dropbox")
+                sync_with_dropbox "up" "${backup_name}_pkgs.bak"
+                ;;
+            "onedrive")
+                sync_with_onedrive "up" "${backup_name}_pkgs.bak"
+                ;;
+            "s3")
+                sync_with_s3 "up" "\${backup_name}_pkgs.bak"
+                ;;
+            *)
+                error "Service cloud non supporté"
+                return 1
+                ;;
+        esac
         return 0
     else
         error "Échec de la sauvegarde des packages"
@@ -200,23 +378,40 @@ function backup_pkgs() {
 # Restore home
 function restore_home() {
     info "Restauration du home"
-    printf "${t}Veuillez patienter...\n"
+    printf "\${t}Veuillez patienter...\n"
 
-    # Synchronisation avec Google Drive
-    sync_with_gdrive "down"
+    # Synchronisation avec le service cloud
+    case "\$cloud_service" in
+        "google")
+            sync_with_gdrive "down"
+            ;;
+        "dropbox")
+            sync_with_dropbox "down"
+            ;;
+        "onedrive")
+            sync_with_onedrive "down"
+            ;;
+        "s3")
+            sync_with_s3 "down"
+            ;;
+        *)
+            error "Service cloud non supporté"
+            return 1
+            ;;
+    esac
 
     # Vérifie les sauvegardes disponibles
-    local backups=($(ls -1 ${DEST}/*_home.bak 2>/dev/null))
+    local backups=(\$(ls -1 ${DEST}/*_home.bak 2>/dev/null))
     if [ ${#backups[@]} -eq 0 ]; then
         error "Aucune sauvegarde disponible"
         return 1
     fi
 
     # Liste les sauvegardes avec la date de création
-    printf "\n${t}Sauvegardes disponibles:\n"
+    printf "\n\${t}Sauvegardes disponibles:\n"
     for i in "${!backups[@]}"; do
-        local creation_date=$(stat -c %y "${backups[$i]}")
-        printf "${t}$((i+1)). ${backups[$i]##*/} (${creation_date})\n"
+        local creation_date=$(stat -c %y "\${backups[\$i]}")
+        printf "\${t}$((i+1)). ${backups[\$i]##*/} (\${creation_date})\n"
     done
     printf "\n"
 
@@ -225,14 +420,14 @@ function restore_home() {
     read -p "Numéro de la sauvegarde à restaurer: " backup_number
 
     if ! [[ "$backup_number" =~ ^[0-9]+$ ]] || \
-       [ "$backup_number" -lt 1 ] || \
+       [ "\$backup_number" -lt 1 ] || \
        [ "$backup_number" -gt ${#backups[@]} ]; then
         error "Sélection invalide"
         return 1
     fi
 
-    local selected_backup="${backups[$((backup_number-1))]}"
-    local safety_backup="${TEMP_DIR}/home_backup_before_restore_$(date +%Y%m%d_%H%M%S).bak"
+    local selected_backup="\${backups[\$((backup_number-1))]}"
+    local safety_backup="\${TEMP_DIR}/home_backup_before_restore_\$(date +%Y%m%d_%H%M%S).bak"
 
     # Crée une sauvegarde de sécurité
     info "Création d'une sauvegarde de sécurité..."
@@ -245,14 +440,14 @@ function restore_home() {
     info "Restauration en cours..."
     if tar -I pigz -xf "${selected_backup}" -C "${SOURCE}"; then
         success "Home restauré avec succès"
-        printf "${t}Redémarrez votre session pour appliquer les changements\n"
-        rm -f "${safety_backup}"
+        printf "\${t}Redémarrez votre session pour appliquer les changements\n"
+        rm -f "\${safety_backup}"
         return 0
     else
         error "Échec de la restauration"
         info "Restauration de la sauvegarde de sécurité..."
         tar -I pigz -xf "${safety_backup}" -C "${SOURCE}"
-        rm -f "${safety_backup}"
+        rm -f "\${safety_backup}"
         return 1
     fi
 }
@@ -265,23 +460,40 @@ function restore_pkgs() {
     fi
 
     info "Restauration des packages"
-    printf "${t}Veuillez patienter...\n"
+    printf "\${t}Veuillez patienter...\n"
 
-    # Synchronisation avec Google Drive
-    sync_with_gdrive "down"
+    # Synchronisation avec le service cloud
+    case "\$cloud_service" in
+        "google")
+            sync_with_gdrive "down"
+            ;;
+        "dropbox")
+            sync_with_dropbox "down"
+            ;;
+        "onedrive")
+            sync_with_onedrive "down"
+            ;;
+        "s3")
+            sync_with_s3 "down"
+            ;;
+        *)
+            error "Service cloud non supporté"
+            return 1
+            ;;
+    esac
 
     # Vérifie les sauvegardes disponibles
-    local backups=($(ls -1 ${DEST}/*_pkgs.bak 2>/dev/null))
+    local backups=(\$(ls -1 ${DEST}/*_pkgs.bak 2>/dev/null))
     if [ ${#backups[@]} -eq 0 ]; then
         error "Aucune sauvegarde disponible"
         return 1
     fi
 
     # Liste les sauvegardes avec la date de création
-    printf "\n${t}Sauvegardes disponibles:\n"
+    printf "\n\${t}Sauvegardes disponibles:\n"
     for i in "${!backups[@]}"; do
-        local creation_date=$(stat -c %y "${backups[$i]}")
-        printf "${t}$((i+1)). ${backups[$i]##*/} (${creation_date})\n"
+        local creation_date=$(stat -c %y "\${backups[\$i]}")
+        printf "\${t}$((i+1)). ${backups[\$i]##*/} (\${creation_date})\n"
     done
     printf "\n"
 
@@ -290,18 +502,18 @@ function restore_pkgs() {
     read -p "Numéro de la sauvegarde à restaurer: " backup_number
 
     if ! [[ "$backup_number" =~ ^[0-9]+$ ]] || \
-       [ "$backup_number" -lt 1 ] || \
+       [ "\$backup_number" -lt 1 ] || \
        [ "$backup_number" -gt ${#backups[@]} ]; then
         error "Sélection invalide"
         return 1
     fi
 
-    local selected_backup="${backups[$((backup_number-1))]}"
+    local selected_backup="\${backups[\$((backup_number-1))]}"
 
     # Mise à jour et installation des packages
     if apt-get update && apt-get install -y $(cat "${selected_backup}"); then
         success "Packages restaurés"
-        printf "${t}Redémarrez votre session pour appliquer les changements\n"
+        printf "\${t}Redémarrez votre session pour appliquer les changements\n"
         return 0
     else
         error "Échec de la restauration des packages"
@@ -309,178 +521,62 @@ function restore_pkgs() {
     fi
 }
 
-# Backup function
-function backup() {
-    local type=$1
+# Delete backups
+function delete_backups() {
+    info "Suppression des sauvegardes..."
 
-    # Demande le nom de la sauvegarde
-    read -p "Nom de la sauvegarde (vide pour nom par défaut): " backup_name
-    if [[ -z "$backup_name" ]]; then
-        backup_name="backup_$(date +%Y%m%d_%H%M%S)"
+    # Vérifie les sauvegardes disponibles
+    local backups=(\$(ls -1 ${DEST}/*.bak 2>/dev/null))
+    if [ ${#backups[@]} -eq 0 ]; then
+        error "Aucune sauvegarde disponible"
+        return 1
     fi
 
-    case "$type" in
-        "home")
-            backup_home
-            ;;
-        "pkgs")
-            backup_pkgs
-            ;;
-        "")
-            backup_home && backup_pkgs
-            ;;
-        *)
-            error "Type de sauvegarde invalide"
-            show_help
-            return 1
-            ;;
-    esac
-}
-
-# Restore function
-function restore() {
-    local type=$1
-
-    case "$type" in
-        "home")
-            restore_home
-            ;;
-        "pkgs")
-            restore_pkgs
-            ;;
-        "")
-            restore_home && restore_pkgs
-            ;;
-        *)
-            error "Type de restauration invalide"
-            show_help
-            return 1
-            ;;
-    esac
-}
-
-# Install dependencies
-function install_dependencies() {
-    if check_internet; then
-        info "Installation des dépendances..."
-
-        if apt-get update && \
-           apt-get install -y tar pigz rclone figlet lolcat; then
-            success "Dépendances installées"
-            return 0
-        fi
-    else
-        error "Pas de connexion internet"
-    fi
-    return 1
-}
-
-# Configure rclone
-function configure_rclone() {
-    if ! rclone listremotes | grep -q "Gdrive:"; then
-        info "Configuration de rclone avec Google Drive..."
-        rclone config
-    else
-        success "rclone déjà configuré avec Google Drive"
-    fi
-}
-
-# Configure cron for automatic backups
-function configure_cron() {
-    info "Configuration de cron pour les sauvegardes automatiques..."
-
-    # Demande l'heure de la sauvegarde
-    read -p "Heure de la sauvegarde (format HH:MM): " backup_time
-
-    # Ajoute la tâche cron
-    (crontab -l 2>/dev/null; echo "${backup_time} * * * ${program_name} -b home") | crontab -
-
-    success "Sauvegarde automatique configurée pour ${backup_time} tous les jours"
-}
-
-# Get optional arguments
-function getopts_get_optional_argument() {
-    eval next_token=\${$OPTIND}
-    if [[ -n $next_token && $next_token != -* ]]; then
-        OPTIND=$((OPTIND + 1))
-        OPTARG=$next_token
-    else
-        OPTARG=""
-    fi
-}
-
-# Cleanup function
-function cleanup() {
-    rm -f "${TEMP_DIR}/${backup_name}_home.tmp" "${TEMP_DIR}/${backup_name}_pkgs.tmp"
-    error "Programme terminé de manière inattendue"
-    exit 1
-}
-
-# Main
-function main() {
-    # Trap signals
-    trap cleanup 1 2 3 15 20
-
-    # Initialize environment
-    init_environment
-
-    # Check and install dependencies
-    if ! [[ $(type -P tar) && $(type -P pigz) && \
-            $(type -P rclone) && $(type -P figlet) && \
-            $(type -P lolcat) ]]; then
-        install_dependencies
-    fi
-
-    # Configure rclone
-    configure_rclone
-
-    # Display banner
-    display_banner
-
-    # Parse arguments
-    local OPTIND
-    while getopts ":hvbrc" opt; do
-        case $opt in
-            h)
-                show_help
-                return 0
-                ;;
-            v)
-                show_version
-                return 0
-                ;;
-            b)
-                getopts_get_optional_argument "$@"
-                backup "${OPTARG}"
-                return $?
-                ;;
-            r)
-                getopts_get_optional_argument "$@"
-                restore "${OPTARG}"
-                return $?
-                ;;
-            c)
-                configure_cron
-                return $?
-                ;;
-            \?)
-                error "Option invalide"
-                return 1
-                ;;
-            :)
-                error "Option nécessitant un argument"
-                show_help
-                return 1
-                ;;
-        esac
+    # Liste les sauvegardes avec la date de création
+    printf "\n\${t}Sauvegardes disponibles:\n"
+    for i in "${!backups[@]}"; do
+        local creation_date=$(stat -c %y "\${backups[\$i]}")
+        printf "\${t}$((i+1)). ${backups[\$i]##*/} (\${creation_date})\n"
     done
+    printf "\n"
 
-    if [[ $OPTIND -eq 1 ]]; then
-        error "Aucune option fournie"
-        printf "Utilisez '${program_name} -h' pour l'aide\n"
+    # Sélection de la sauvegarde à supprimer
+    local backup_number
+    read -p "Numéro de la sauvegarde à supprimer: " backup_number
+
+    if ! [[ "$backup_number" =~ ^[0-9]+$ ]] || \
+       [ "\$backup_number" -lt 1 ] || \
+       [ "$backup_number" -gt ${#backups[@]} ]; then
+        error "Sélection invalide"
+        return 1
+    fi
+
+    local selected_backup="\${backups[\$((backup_number-1))]}"
+
+    # Suppression de la sauvegarde
+    info "Suppression de la sauvegarde en cours..."
+    if rm -f "\${selected_backup}"; then
+        success "Sauvegarde supprimée avec succès"
+        return 0
+    else
+        error "Échec de la suppression de la sauvegarde"
         return 1
     fi
 }
 
-main "$@"
-exit $?
+# Unschedule cron jobs
+function unschedule_cron() {
+    info "Désinstallation des tâches cron existantes..."
+
+    # Liste les tâches cron existantes
+    local cron_jobs=\$(crontab -l 2>/dev/null)
+    if [[ -z "\$cron_jobs" ]]; then
+        error "Aucune tâche cron existante"
+        return 1
+    fi
+
+    # Affiche les tâches cron existantes
+    printf "\n\${t}Tâches cron existantes:\n"
+    local job_number=1
+    while IFS= read -r line; do
+        printf "${t}$((job_number++))
