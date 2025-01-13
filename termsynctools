@@ -202,7 +202,7 @@ function backup_proot() {
     local proot_file="${DEST}/${backup_name}_proot.bak"
 
     # Sauvegarde de proot-distrib
-    if tar -I pigz -cf "${proot_file}" -C "${PROOT_SRC}" ; then
+    if tar -I pigz -cf "${proot_file}" -C "${PROOT_SRC}" . ; then
         success "proot-distrib sauvegardé dans: ${proot_file}"
         sync_with_gdrive "up" "${backup_name}_proot.bak"
         return 0
@@ -375,7 +375,7 @@ function restore_proot() {
 
     # Crée une sauvegarde de sécurité
     info "Création d'une sauvegarde de sécurité..."
-    if ! tar -I pigz -cf "${safety_backup}" -C "${SOURCE}" proot-distro ; then
+    if ! tar -I pigz -cf "${safety_backup}" -C "${PROOT_SRC}" . ; then
         error "Impossible de créer la sauvegarde de sécurité"
         return 1
     fi
@@ -390,7 +390,7 @@ function restore_proot() {
     else
         error "Échec de la restauration"
         info "Restauration de la sauvegarde de sécurité..."
-        tar -I pigz -xf "${safety_backup}" -C "${SOURCE}"
+        tar -I pigz -xf "${safety_backup}" -C "${PROOT_SRC}"
         rm -f "${safety_backup}"
         return 1
     fi
@@ -558,7 +558,6 @@ function delete_auto_backup() {
     success "Sauvegarde automatique supprimée"
     return 0
 }
-
 
 # Install dependencies
 function install_dependencies() {
