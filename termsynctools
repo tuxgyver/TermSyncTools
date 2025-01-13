@@ -17,6 +17,7 @@ readonly GDRIVE_REMOTE="Gdrive:/Termux/Backup"
 readonly VERSION="0.2.8"
 readonly TEMP_DIR="/data/data/com.termux/files/usr/tmp"
 readonly program_name=$(basename "$0")
+readonly PROOT_SRC="$PREFIX/var/lib/proot-distro/installed-rootfs"
 
 # Colors
 B='\e[1;34m'	# blue
@@ -201,7 +202,7 @@ function backup_proot() {
     local proot_file="${DEST}/${backup_name}_proot.bak"
 
     # Sauvegarde de proot-distrib
-    if tar -I pigz -cf "${proot_file}" -C "${SOURCE}" proot-distro ; then
+    if tar -I pigz -cf "${proot_file}" -C "${PROOT_SRC}" ; then
         success "proot-distrib sauvegardé dans: ${proot_file}"
         sync_with_gdrive "up" "${backup_name}_proot.bak"
         return 0
@@ -381,7 +382,7 @@ function restore_proot() {
 
     # Restaure la sauvegarde
     info "Restauration en cours..."
-    if tar -I pigz -xf "${selected_backup}" -C "${SOURCE}"; then
+    if tar -I pigz -xf "${selected_backup}" -C "${PROOT_SRC}"; then
         success "proot-distrib restauré avec succès"
         printf "${t}Redémarrez votre session pour appliquer les changements\n"
         rm -f "${safety_backup}"
